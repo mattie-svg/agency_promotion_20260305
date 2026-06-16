@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>프로모션 리텐션 분석 대시보드</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f4ef; color: #1a1a18; padding: 24px; }
+  h1 { font-size: 18px; font-weight: 500; margin-bottom: 6px; }
+  .subtitle { font-size: 13px; color: #888780; margin-bottom: 24px; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+  .tab { padding: 6px 16px; border: 1px solid #d3d1c7; border-radius: 8px; background: #fff; color: #5f5e5a; font-size: 13px; cursor: pointer; transition: all .15s; }
+  .tab:hover { background: #f1efe8; }
+  .tab.active { background: #e6f1fb; color: #185fa5; border-color: #85b7eb; font-weight: 500; }
+  .metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+  @media(max-width:700px){ .metric-grid { grid-template-columns: repeat(2,1fr); } .two-col { grid-template-columns: 1fr !important; } }
+  .metric { background: #fff; border: 1px solid #e8e6df; border-radius: 8px; padding: 14px 16px; }
+  .metric-label { font-size: 11px; color: #888780; margin-bottom: 4px; }
+  .metric-value { font-size: 20px; font-weight: 500; }
+  .metric-sub { font-size: 11px; color: #b4b2a9; margin-top: 3px; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+  .chart-card { background: #fff; border: 1px solid #e8e6df; border-radius: 12px; padding: 16px; }
+  .section-title { font-size: 13px; font-weight: 500; color: #5f5e5a; margin-bottom: 10px; }
+  .legend { display: flex; gap: 14px; margin-bottom: 10px; font-size: 12px; color: #888780; flex-wrap: wrap; }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .ld { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+  .tbl-card { background: #fff; border: 1px solid #e8e6df; border-radius: 12px; padding: 16px; }
+  .tbl-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 800px; }
+  th { text-align: left; color: #888780; font-weight: 500; border-bottom: 1px solid #e8e6df; padding: 8px; font-size: 11px; white-space: nowrap; }
+  td { padding: 7px 8px; border-bottom: 1px solid #f1efe8; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f9f8f5; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 500; }
+  .b-50 { background: #e6f1fb; color: #0c447c; }
+  .b-20 { background: #eaf3de; color: #27500a; }
+  .b-miss { background: #f1efe8; color: #444441; }
+  .b-3 { background: #faeeda; color: #633806; }
+  .b-4 { background: #e1f5ee; color: #085041; }
+  .b-5 { background: #eeedfe; color: #26215c; }
+  .b-null { background: #f1efe8; color: #5f5e5a; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+  .dot-on { background: #1d9e75; }
+  .dot-off { background: #d1d0c8; }
+  .reward { color: #0f6e56; font-weight: 500; }
+  .bna { background:#f1efe8;color:#5f5e5a; }
+  .bhi { background:#eaf3de;color:#27500a; }
+  .bmd { background:#e6f1fb;color:#0c447c; }
+</style>
+</head>
+<body>
+
+<h1>프로모션 리텐션 분석</h1>
+<p class="subtitle">기준일: 2026-06-16 · 프로모션 기간: 2026-03-01 ~ 2026-05-31 · 현재 집행 활성 기준: 최근 7일</p>
+
+<div class="tabs">
+  <button class="tab" onclick="renderSummary()">요약</button>
+  <button class="tab active" onclick="render('all')">전체</button>
+  <button class="tab" onclick="render('3월')">3월 지급</button>
+  <button class="tab" onclick="render('4월')">4월 지급</button>
+  <button class="tab" onclick="render('5월')">5월 지급</button>
+  <button class="tab" onclick="render('none')">미지급</button>
+</div>
+
+<div id="content"></div>
+
+<script>
+const data = [
+  {id:4216507,name:'su_법무법인오른',pay:null,tier:'미충족',promo:1083221,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4102340,name:'블랙야크',pay:null,tier:'미충족',promo:1014229,reward:0,ret:1,postCash:83163,postGift:0,lastSpend:'2026-06-08',active:0,dtr:1},
+  {id:4190035,name:'광장오토모티브',pay:null,tier:'미충족',promo:1013882,reward:0,ret:1,postCash:86118,postGift:0,lastSpend:'2026-05-28',active:0,dtr:1},
+  {id:4221904,name:'진심컴퍼니',pay:null,tier:'미충족',promo:994136,reward:0,ret:1,postCash:500000,postGift:0,lastSpend:'2026-05-28',active:0,dtr:6},
+  {id:4311486,name:'제이엠 솔루션',pay:null,tier:'미충족',promo:861922,reward:0,ret:1,postCash:438078,postGift:0,lastSpend:'2026-06-14',active:0,dtr:1},
+  {id:4309193,name:'디케이글로벌코리아',pay:null,tier:'미충족',promo:815248,reward:0,ret:1,postCash:384752,postGift:0,lastSpend:'2026-06-15',active:0,dtr:1},
+  {id:4192520,name:'금융정보지원센터',pay:null,tier:'미충족',promo:770000,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4301687,name:'시의전서',pay:null,tier:'미충족',promo:756880,reward:0,ret:1,postCash:452235,postGift:0,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:3064631,name:'IMC_관절보궁',pay:null,tier:'미충족',promo:731390,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4099352,name:'뉴메이슨',pay:null,tier:'미충족',promo:705702,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4259766,name:'현만통신',pay:null,tier:'미충족',promo:702460,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4146618,name:'정책자금_소상공인',pay:null,tier:'미충족',promo:668711,reward:0,ret:1,postCash:3638012,postGift:5000,lastSpend:'2026-06-16',active:1,dtr:3},
+  {id:4175612,name:'오이사',pay:null,tier:'미충족',promo:664237,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:3347402,name:'폴스킨',pay:null,tier:'미충족',promo:606398,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4183860,name:'퓨어리서치',pay:null,tier:'미충족',promo:544305,reward:0,ret:1,postCash:15695,postGift:0,lastSpend:'2026-04-27',active:0,dtr:1},
+  {id:4141115,name:'파인오토솔루션',pay:null,tier:'미충족',promo:500000,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4184266,name:'제이앤제이트레이너스',pay:null,tier:'미충족',promo:500000,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4191879,name:'젓갈이야기',pay:null,tier:'미충족',promo:300000,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4235249,name:'낭만수산',pay:null,tier:'미충족',promo:275429,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4110321,name:'정량딱한끼',pay:null,tier:'미충족',promo:237854,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:3347530,name:'광동 맑은365',pay:null,tier:'미충족',promo:225595,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:3325372,name:'그대로말린',pay:null,tier:'미충족',promo:121507,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4237117,name:'DT_콜로소 KR',pay:null,tier:'미충족',promo:22616,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4125729,name:'폰킹 신월점',pay:null,tier:'미충족',promo:21635,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4159466,name:'보담모바일 구월점',pay:null,tier:'미충족',promo:15400,reward:0,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4171294,name:'인절미1',pay:'3월',tier:'50%',promo:5624089,reward:2812045,ret:1,postCash:10389780,postGift:2611965,lastSpend:'2026-06-07',active:0,dtr:1},
+  {id:3477164,name:'하이트진로 맥주',pay:'3월',tier:'50%',promo:16462134,reward:3300000,ret:1,postCash:24209585,postGift:3300000,lastSpend:'2026-05-31',active:0,dtr:1},
+  {id:4154725,name:'우리카',pay:'3월',tier:'50%',promo:8274643,reward:3300000,ret:1,postCash:8844177,postGift:3300000,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4157451,name:'HUG_리바이포유',pay:'3월',tier:'50%',promo:3872112,reward:1936056,ret:1,postCash:1919691,postGift:1560508,lastSpend:'2026-05-10',active:0,dtr:1},
+  {id:4143146,name:'엠플랜잇_흥국화재TM',pay:'3월',tier:'50%',promo:3777884,reward:1888942,ret:1,postCash:1114353,postGift:1888942,lastSpend:'2026-04-17',active:0,dtr:1},
+  {id:4143080,name:'센스맘_마케팅본부',pay:'3월',tier:'50%',promo:3300000,reward:1650000,ret:0,postCash:0,postGift:1650000,lastSpend:null,active:0,dtr:null},
+  {id:4145306,name:'샤브20',pay:'3월',tier:'20%',promo:2071000,reward:414200,ret:1,postCash:5974350,postGift:414200,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4143456,name:'코아드',pay:'3월',tier:'20%',promo:1491237,reward:298247,ret:1,postCash:1058763,postGift:298188,lastSpend:'2026-05-02',active:0,dtr:1},
+  {id:3354681,name:'MA5_레고코리아',pay:'4월',tier:'50%',promo:13395021,reward:3300000,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4207176,name:'진잠원.2',pay:'4월',tier:'50%',promo:8499850,reward:3300000,ret:1,postCash:6309688,postGift:3300000,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4168273,name:'브이아이피키드',pay:'4월',tier:'50%',promo:7251984,reward:3300000,ret:1,postCash:16989564,postGift:3300000,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4217617,name:'굿네이버스',pay:'4월',tier:'50%',promo:7238022,reward:3300000,ret:1,postCash:3941695,postGift:2565074,lastSpend:'2026-05-26',active:0,dtr:8},
+  {id:4172224,name:'세종빅벤',pay:'4월',tier:'50%',promo:6952451,reward:3300000,ret:1,postCash:14307425,postGift:3300000,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4174292,name:'광-젠부',pay:'4월',tier:'50%',promo:6570146,reward:3285073,ret:1,postCash:11195096,postGift:3285073,lastSpend:'2026-06-16',active:1,dtr:2},
+  {id:4126995,name:'휴대폰성지 폰킹',pay:'4월',tier:'50%',promo:4820000,reward:2410000,ret:0,postCash:0,postGift:2409123,lastSpend:null,active:0,dtr:null},
+  {id:4188442,name:'한국투자프랜차이즈',pay:'4월',tier:'50%',promo:3396231,reward:1698116,ret:1,postCash:826026,postGift:1698116,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4209201,name:'마켓보로',pay:'4월',tier:'50%',promo:3331464,reward:1665732,ret:1,postCash:23744775,postGift:1665732,lastSpend:'2026-06-16',active:1,dtr:15},
+  {id:4219733,name:'그린비에이치',pay:'4월',tier:'20%',promo:2200497,reward:440099,ret:1,postCash:1250708,postGift:456166,lastSpend:'2026-05-21',active:0,dtr:1},
+  {id:4156158,name:'39치떡',pay:'4월',tier:'20%',promo:2167746,reward:433549,ret:1,postCash:4712524,postGift:433549,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4174116,name:'마이요거트립',pay:'4월',tier:'20%',promo:1335225,reward:267045,ret:1,postCash:64775,postGift:267045,lastSpend:'2026-05-13',active:0,dtr:1},
+  {id:3273522,name:'함파트너스_연세유업',pay:'4월',tier:'20%',promo:1196127,reward:239225,ret:1,postCash:1003873,postGift:239225,lastSpend:'2026-05-20',active:0,dtr:1},
+  {id:4150163,name:'맞춤영양제 메디코치',pay:'4월',tier:'20%',promo:1100000,reward:220000,ret:0,postCash:0,postGift:219680,lastSpend:null,active:0,dtr:null},
+  {id:4336731,name:'운세박람회',pay:'5월',tier:'50%',promo:7000000,reward:3300000,ret:0,postCash:0,postGift:16890,lastSpend:null,active:0,dtr:null},
+  {id:4222127,name:'직폰_와싸',pay:'5월',tier:'50%',promo:4360443,reward:2180222,ret:1,postCash:439557,postGift:591649,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4219467,name:'국민카',pay:'5월',tier:'50%',promo:4350921,reward:2175461,ret:1,postCash:1649079,postGift:6996,lastSpend:'2026-06-08',active:0,dtr:1},
+  {id:4302155,name:'더금융서비스',pay:'5월',tier:'50%',promo:3500000,reward:1750000,ret:0,postCash:0,postGift:1750000,lastSpend:null,active:0,dtr:null},
+  {id:4226420,name:'직폰_삼오',pay:'5월',tier:'50%',promo:3336908,reward:1668454,ret:1,postCash:1218533,postGift:604191,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4305726,name:'PLAYD_메디25',pay:'5월',tier:'50%',promo:3311000,reward:1655500,ret:0,postCash:0,postGift:585096,lastSpend:null,active:0,dtr:null},
+  {id:4301855,name:'이야기모바일',pay:'5월',tier:'50%',promo:3300000,reward:1650000,ret:0,postCash:0,postGift:773931,lastSpend:null,active:0,dtr:null},
+  {id:4266289,name:'기업생각',pay:'5월',tier:'20%',promo:3000000,reward:600000,ret:0,postCash:0,postGift:235276,lastSpend:null,active:0,dtr:null},
+  {id:4278795,name:'신한중고차',pay:'5월',tier:'20%',promo:2921985,reward:584397,ret:1,postCash:458535,postGift:171138,lastSpend:'2026-06-12',active:0,dtr:1},
+  {id:4201802,name:'청담족발',pay:'5월',tier:'20%',promo:2702447,reward:540489,ret:1,postCash:1301354,postGift:188705,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4254276,name:'아이디룩몰',pay:'5월',tier:'20%',promo:2624873,reward:524975,ret:1,postCash:778940,postGift:524975,lastSpend:'2026-06-10',active:0,dtr:1},
+  {id:4237508,name:'에이렌탈앤서비스',pay:'5월',tier:'20%',promo:2509437,reward:501887,ret:1,postCash:1943805,postGift:501887,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4219412,name:'롯데호텔앤리조트',pay:'5월',tier:'20%',promo:2188286,reward:437657,ret:1,postCash:110187,postGift:104513,lastSpend:'2026-06-16',active:1,dtr:1},
+  {id:4271863,name:'소상공인 안내센터',pay:'5월',tier:'20%',promo:2037786,reward:407557,ret:1,postCash:1000000,postGift:410557,lastSpend:'2026-06-14',active:0,dtr:11},
+  {id:4248744,name:'유니세프',pay:'5월',tier:'20%',promo:1835444,reward:367089,ret:1,postCash:163,postGift:367089,lastSpend:'2026-06-13',active:0,dtr:29},
+  {id:4248892,name:'레더라 판교팝업',pay:'5월',tier:'20%',promo:1700000,reward:340000,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4255785,name:'안심오토리스',pay:'5월',tier:'20%',promo:1528252,reward:305650,ret:0,postCash:0,postGift:0,lastSpend:null,active:0,dtr:null},
+  {id:4252792,name:'로이파트너스',pay:'5월',tier:'20%',promo:1200000,reward:240000,ret:0,postCash:0,postGift:240000,lastSpend:null,active:0,dtr:null},
+  {id:4225133,name:'우리의맛남',pay:'5월',tier:'20%',promo:1173021,reward:234604,ret:1,postCash:26979,postGift:166672,lastSpend:'2026-06-16',active:1,dtr:1},
+];
+
+const fmt = v => v>=1e8?(v/1e8).toFixed(2).replace(/\.?0+$/,'')+'억':v>=1e4?Math.round(v/1e4).toLocaleString()+'만원':v.toLocaleString()+'원';
+const payBadge = p => p==='3월'?'b-3':p==='4월'?'b-4':p==='5월'?'b-5':'b-null';
+const tierBadge = t => t==='50%'?'b-50':t==='20%'?'b-20':'b-miss';
+
+let charts = [];
+function destroyCharts(){ charts.forEach(c=>c.destroy()); charts=[]; }
+
+function render(filter){
+  destroyCharts();
+  document.querySelectorAll('.tab').forEach(b=>{
+    const lbl = b.textContent.trim();
+    b.classList.toggle('active',
+      (filter==='all'&&lbl==='전체')||
+      (filter==='3월'&&lbl==='3월 지급')||
+      (filter==='4월'&&lbl==='4월 지급')||
+      (filter==='5월'&&lbl==='5월 지급')||
+      (filter==='none'&&lbl==='미지급')
+    );
+  });
+
+  const f = filter==='all'?data:filter==='none'?data.filter(d=>!d.pay):data.filter(d=>d.pay===filter);
+  const total = f.length;
+  const retCount = f.filter(d=>d.ret===1).length;
+  const activeCount = f.filter(d=>d.active===1).length;
+  const totalPostCash = f.filter(d=>d.postCash>0).reduce((a,d)=>a+d.postCash,0);
+  const totalPostGift = f.filter(d=>d.postGift>0).reduce((a,d)=>a+d.postGift,0);
+
+  // 유상 소진 & 지급 캐시 모두 스프레드시트 탭 기준
+  const sheetSpendMap = {'3월':44872802,'4월':69535098,'5월':54494563};
+  const sheetRewardMap = {'3월':15599431,'4월':27158839,'5월':19463942};
+  const unpaidSpend = data.filter(d=>!d.pay).reduce((a,x)=>a+x.promo,0);
+  const totalSpend = filter==='all'
+    ? 44872802+69535098+54494563+unpaidSpend
+    : filter==='none' ? unpaidSpend
+    : (sheetSpendMap[filter]||0);
+  const totalReward = filter==='all'
+    ? 15599431+27158839+19463942
+    : filter==='none' ? 0
+    : (sheetRewardMap[filter]||0);
+
+  document.getElementById('content').innerHTML = `
+    <div class="metric-grid">
+      <div class="metric"><p class="metric-label">계정 수</p><p class="metric-value">${total}개</p></div>
+      <div class="metric"><p class="metric-label">총 유상 소진</p><p class="metric-value" style="font-size:17px">${fmt(totalSpend)}</p></div>
+      <div class="metric"><p class="metric-label">총 지급 캐시</p><p class="metric-value" style="font-size:17px">${fmt(totalReward)}</p><p class="metric-sub">소진 대비 ${totalSpend>0?Math.round(totalReward/totalSpend*100):0}%</p></div>
+      <div class="metric"><p class="metric-label">리텐션율</p><p class="metric-value">${Math.round(retCount/total*100)}%</p><p class="metric-sub">${retCount}/${total}개 재집행</p></div>
+    </div>
+    <div class="two-col">
+      <div class="chart-card">
+        <p class="section-title">tier별 리텐션 & 현재 활성</p>
+        <div class="legend">
+          <span><span class="ld" style="background:#3266ad"></span>리텐션</span>
+          <span><span class="ld" style="background:#1D9E75"></span>현재 활성</span>
+        </div>
+        <div style="position:relative;height:190px;"><canvas id="tc"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <p class="section-title">재집행까지 걸린 일수</p>
+        <div style="position:relative;height:190px;"><canvas id="dc"></canvas></div>
+      </div>
+    </div>
+    <div class="tbl-card">
+      <p class="section-title">계정별 상세</p>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>계정명</th><th>지급월</th><th>Tier</th>
+            <th style="text-align:right">프로모션 소진</th>
+            <th style="text-align:right">지급 캐시</th>
+            <th style="text-align:center">리텐션</th>
+            <th style="text-align:center">현재 활성</th>
+            <th style="text-align:right">프로모션 후 유상 소진</th>
+            <th style="text-align:right">프로모션 후 무상 소진</th>
+            <th style="text-align:center">유상 전환</th>
+            <th>마지막 집행일</th>
+          </tr></thead>
+          <tbody>${f.sort((a,b)=>b.promo-a.promo).map(d=>`
+            <tr>
+              <td>${d.name}</td>
+              <td><span class="badge ${payBadge(d.pay)}">${d.pay||'미지급'}</span></td>
+              <td><span class="badge ${tierBadge(d.tier)}">${d.tier}</span></td>
+              <td style="text-align:right">${fmt(d.promo)}</td>
+              <td style="text-align:right" class="${d.reward>0?'reward':''}">${d.reward>0?fmt(d.reward):'-'}</td>
+              <td style="text-align:center">${d.ret?'✓':'✗'}</td>
+              <td style="text-align:center"><span class="dot ${d.active?'dot-on':'dot-off'}"></span>${d.active?'활성':'비활성'}</td>
+              <td style="text-align:right">${d.postCash>0?fmt(d.postCash):'-'}</td>
+              <td style="text-align:right;color:#888780">${d.postGift>0?fmt(d.postGift):'-'}</td>
+              <td style="text-align:center">${d.pay&&d.postCash>0?'<span class=\"badge bhi\">✓ 유상전환</span>':d.pay&&d.postGift>0?'<span class=\"badge bmd\">무상소진</span>':d.pay?'<span class=\"badge bna\">미소진</span>':'-'}</td>
+              <td style="font-size:11px;color:#888780">${d.lastSpend||'-'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  const tiers=['50%','20%','미충족'];
+  const td = tiers.map(t=>{
+    const g=f.filter(d=>d.tier===t);
+    return {ret:g.filter(d=>d.ret===1).length,active:g.filter(d=>d.active===1).length,total:g.length};
+  });
+  charts.push(new Chart(document.getElementById('tc'),{
+    type:'bar',
+    data:{labels:['50% 티어','20% 티어','미충족'],
+      datasets:[
+        {label:'리텐션',data:td.map(d=>d.total?Math.round(d.ret/d.total*100):0),backgroundColor:'#3266ad',borderRadius:4},
+        {label:'현재 활성',data:td.map(d=>d.total?Math.round(d.active/d.total*100):0),backgroundColor:'#1D9E75',borderRadius:4},
+      ]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.raw+'%'}}},
+      scales:{x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}},
+        y:{max:100,ticks:{color:'#888780',callback:v=>v+'%'},grid:{color:'rgba(0,0,0,0.08)'}}}}
+  }));
+
+  const dtrVals=f.filter(d=>d.dtr!==null).map(d=>d.dtr);
+  charts.push(new Chart(document.getElementById('dc'),{
+    type:'bar',
+    data:{labels:['1일','2~3일','4~7일','8일+'],
+      datasets:[{label:'계정 수',data:[[1,1],[2,3],[4,7],[8,99]].map(([lo,hi])=>dtrVals.filter(v=>v>=lo&&v<=hi).length),backgroundColor:'#639922',borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{grid:{display:false},ticks:{color:'#888780',font:{size:11}}},
+        y:{ticks:{color:'#888780',stepSize:1},grid:{color:'rgba(0,0,0,0.08)'}}}}
+  }));
+}
+
+
+function renderSummary() {
+  destroyCharts();
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.textContent.trim()==='요약'));
+  const byPay = p => p===null ? data.filter(d=>!d.pay) : data.filter(d=>d.pay===p);
+  const rows = [
+    {label:'3월 지급', d:byPay('3월')},
+    {label:'4월 지급', d:byPay('4월')},
+    {label:'5월 지급', d:byPay('5월')},
+    {label:'미지급',   d:byPay(null)},
+    {label:'합계',     d:data},
+  ];
+  const fmt = v => v>=1e8?(v/1e8).toFixed(2).replace(/\.?0+$/,'')+'억':v>=1e4?Math.round(v/1e4).toLocaleString()+'만원':v.toLocaleString()+'원';
+  const retBadge = (r,t) => {
+    const cls = r>=70?'bhi':r>=50?'bmd':'blo';
+    return '<span class="badge '+cls+'">'+r+'% ('+Math.round(r/100*t)+'/'+t+')</span>';
+  };
+  const actBadge = (r,t) => {
+    const cls = r>=50?'bhi':r>=30?'bmd':'blo';
+    return '<span class="badge '+cls+'">'+r+'% ('+Math.round(r/100*t)+'/'+t+')</span>';
+  };
+  // 스프레드시트 탭 기준 실제 집계값 (30일 윈도우 기준과 다름)
+  const sheetSpend = {'3월 지급':44872802, '4월 지급':69535098, '5월 지급':54494563};
+  const sheetReward = {'3월 지급':15599431, '4월 지급':27158839, '5월 지급':19463942};
+
+  const tblRows = rows.map(({label,d}) => {
+    const total = d.length;
+    const ret = d.filter(x=>x.ret===1).length;
+    const act = d.filter(x=>x.active===1).length;
+    const spend = sheetSpend[label] || d.reduce((a,x)=>a+x.promo,0);
+    const reward = label==='합계'
+      ? 15599431+27158839+19463942
+      : sheetReward[label] !== undefined ? sheetReward[label] : 0;
+    const post = d.reduce((a,x)=>a+(x.postCash||0),0);
+    const retR = Math.round(ret/total*100);
+    const actR = Math.round(act/total*100);
+    return '<tr><td>'+label+'</td><td>'+total+'개</td><td>'+fmt(spend)+'</td><td style="color:#0f6e56;font-weight:500">'+(reward>0?fmt(reward):'-')+'</td><td>'+retBadge(retR,total)+'</td><td>'+actBadge(actR,total)+'</td><td>'+(post>0?fmt(post):'-')+'</td></tr>';
+  }).join('');
+
+  const tierRows = ['50%','20%','미충족'].map((t,i) => {
+    const g = data.filter(x=>x.tier===t);
+    const ret = g.length ? Math.round(g.filter(x=>x.ret===1).length/g.length*100) : 0;
+    const act = g.length ? Math.round(g.filter(x=>x.active===1).length/g.length*100) : 0;
+    const cols = ['#3266ad','#1D9E75','#888780'];
+    return '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'+
+      '<span style="font-size:12px;color:#888780;width:70px;flex-shrink:0">'+t+' 티어</span>'+
+      '<div style="flex:1;background:#f1efe8;border-radius:4px;height:20px;overflow:hidden">'+
+      '<div style="width:'+ret+'%;height:100%;background:'+cols[i]+';border-radius:4px;display:flex;align-items:center;padding-left:8px">'+
+      '<span style="font-size:11px;font-weight:500;color:#fff">리텐션 '+ret+'%</span></div></div>'+
+      '<span style="font-size:11px;color:#888780;width:90px;flex-shrink:0">현재 활성 '+act+'%</span></div>';
+  }).join('');
+
+  const totalSpend = 44872802 + 69535098 + 54494563 + data.filter(d=>!d.pay).reduce((a,x)=>a+x.promo,0);
+  const totalReward = 15599431 + 27158839 + 19463942;
+  const totalRet = data.filter(x=>x.ret===1).length;
+  const totalActive = data.filter(x=>x.active===1).length;
+  const rewardRatio = Math.round(totalReward/totalSpend*100);
+  const retRate = Math.round(totalRet/data.length*100);
+  const activeRate = Math.round(totalActive/data.length*100);
+
+  document.getElementById('content').innerHTML =
+    '<div style="margin-bottom:20px">'+
+    '<p style="font-size:13px;font-weight:500;color:#5f5e5a;margin:0 0 12px">전체 현황 (신규 광고주 '+data.length+'개 계정 · 기준일 2026-06-16)</p>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px">'+
+    '<div class="metric"><p class="metric-label">총 유상 소진</p><p class="metric-value">'+fmt(totalSpend)+'</p><p class="metric-sub">3~5월 합산</p></div>'+
+    '<div class="metric"><p class="metric-label">총 지급 캐시</p><p class="metric-value">'+fmt(totalReward)+'</p><p class="metric-sub">소진 대비 '+rewardRatio+'%</p></div>'+
+    '<div class="metric"><p class="metric-label">리텐션율</p><p class="metric-value">'+retRate+'%</p><p class="metric-sub">'+totalRet+'/'+data.length+'개 재집행</p></div>'+
+    '<div class="metric"><p class="metric-label">현재 활성 (7일)</p><p class="metric-value">'+activeRate+'%</p><p class="metric-sub">'+totalActive+'/'+data.length+'개 집행 중</p></div>'+
+    '</div></div>'+
+    '<div class="tbl-card" style="margin-bottom:20px">'+
+    '<p style="font-size:13px;font-weight:500;color:#5f5e5a;margin:0 0 12px">지급월별 집행 금액 및 잔존율</p>'+
+    '<div style="overflow-x:auto"><table class="sum-tbl" style="min-width:580px">'+
+    '<thead><tr><th style="text-align:left">구분</th><th>계정 수</th><th>유상 소진</th><th>지급 캐시</th><th>리텐션율</th><th>현재 활성</th><th>프로모션 후 소진</th></tr></thead>'+
+    '<tbody>'+tblRows+'</tbody></table></div></div>'+
+    '<div class="tbl-card" style="margin-bottom:20px">'+
+    '<p style="font-size:13px;font-weight:500;color:#5f5e5a;margin:0 0 14px">tier별 잔존율</p>'+
+    tierRows+'</div>';
+
+  // ROI 동적 계산
+  const totalRewardAll = 15599431 + 27158839 + 19463942;
+  const totalPostAll = data.reduce((a,x)=>a+x.postCash,0);
+  const roiPct = Math.round((totalPostAll - totalRewardAll) / totalRewardAll * 100);
+  const roiMultiple = (totalPostAll / totalRewardAll).toFixed(1);
+
+  // 전환율 계산
+  const paidData = data.filter(d=>d.pay);
+  const convClassify = d => d.postCash>0?1:d.postGift>0?2:0;
+  const convCount = paidData.filter(d=>convClassify(d)===1).length;
+  const convTotal = paidData.length;
+  const convReward = paidData.reduce((a,d)=>a+d.reward,0);
+  const convPostCash = paidData.filter(d=>d.postCash>0).reduce((a,d)=>a+d.postCash,0);
+
+  document.getElementById('content').innerHTML += 
+    '<div class="ins-card" style="margin-bottom:20px">'+
+    '<p class="ins-lbl">지급 캐시 대비 추가 소진 ROI</p>'+
+    '<p class="ins-val">+'+roiPct+'%</p>'+
+    '<p class="ins-desc">지급 캐시 '+fmt(totalRewardAll)+' 대비 프로모션 후 소진이 '+fmt(totalPostAll)+'으로, 지급액의 '+roiMultiple+'배가 추가 유상 소진으로 이어졌어요.</p>'+
+    '</div>'+
+    '<div class="tbl-card" style="margin-bottom:20px">'+
+    '<p style="font-size:13px;font-weight:500;color:#5f5e5a;margin:0 0 12px">지급 계정 유상 전환율 ('+convTotal+'개)</p>'+
+    '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px" id="convMetrics"></div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+    '<div><p style="font-size:12px;color:#888780;margin:0 0 8px">지급월별 유상 전환율</p>'+
+    '<div style="position:relative;height:180px"><canvas id="convMonthChart"></canvas></div></div>'+
+    '<div><p style="font-size:12px;color:#888780;margin:0 0 8px">tier별 유상 전환율</p>'+
+    '<div style="position:relative;height:180px"><canvas id="convTierChart"></canvas></div></div>'+
+    '</div>'+
+    '<div style="margin-top:16px" id="convInsights"></div>'+
+    '</div>'+
+    '<div class="tbl-card" style="margin-bottom:20px">'+
+    '<p style="font-size:13px;font-weight:500;color:#5f5e5a;margin:0 0 12px">에이전시별 리텐션율 (지급 에이전시)</p>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
+    '<div><div style="position:relative;height:280px;"><canvas id="sumAgChart" role="img" aria-label="에이전시별 리텐션율"></canvas></div></div>'+
+    '<div style="overflow-x:auto"><table class="sum-tbl" style="min-width:360px">'+
+    '<thead><tr><th style="text-align:left">에이전시</th><th>계정</th><th>리텐션</th><th>현재 활성</th><th>후 소진</th></tr></thead>'+
+    '<tbody id="sumAgTbl"></tbody>'+
+    '</table></div>'+
+    '</div></div>'+
+    '<div class="tbl-card">'+
+    '<p style="font-size:13px;font-weight:500;color:#5f5e5a;margin:0 0 12px">에이전시 주요 인사이트</p>'+
+    '<div id="sumAgInsights"></div>'+
+    '</div>';
+  const paidAg = [
+    {ag:'비에이티',         total:2,  ret:2, active:1, post:24100000},
+    {ag:'디지털트리니티',   total:1,  ret:1, active:1, post:900000},
+    {ag:'매드업',           total:1,  ret:1, active:1, post:2850000},
+    {ag:'드림인사이트',     total:5,  ret:4, active:3, post:6100000},
+    {ag:'플레이디',         total:3,  ret:2, active:2, post:18200000},
+    {ag:'모비데이즈',       total:3,  ret:2, active:1, post:1100000},
+    {ag:'메조미디어',       total:3,  ret:2, active:1, post:22600000},
+    {ag:'세일업',           total:10, ret:6, active:3, post:43000000},
+    {ag:'프로그레스미디어', total:16, ret:9, active:6, post:48000000},
+    {ag:'엠플랜잇',         total:2,  ret:1, active:1, post:3900000},
+    {ag:'나스미디어',       total:1,  ret:0, active:0, post:0},
+    {ag:'디엠씨미디어',     total:1,  ret:0, active:0, post:0},
+    {ag:'디플랜360',        total:1,  ret:0, active:0, post:0},
+  ].sort((a,b)=>b.ret/b.total - a.ret/a.total);
+
+  const unpaidAg = [
+    {ag:'나스미디어',       total:1, ret:0, active:0, post:0},
+    {ag:'디엠씨미디어',     total:1, ret:0, active:0, post:0},
+    {ag:'하나애드아이엠씨', total:1, ret:1, active:0, post:86000},
+    {ag:'이엠넷',           total:1, ret:1, active:1, post:83000},
+    {ag:'매드업',           total:1, ret:0, active:0, post:0},
+    {ag:'인크로스',         total:0, ret:0, active:0, post:0},
+    {ag:'이엔미디어',       total:0, ret:0, active:0, post:0},
+  ];
+
+  const fmtPost = v => v>=1e8?(v/1e8).toFixed(2).replace(/\.?0+$/,'')+'억':v>=1e4?Math.round(v/1e4)+'만원':v>0?v.toLocaleString()+'원':'-';
+
+  const sumAgTbl = document.getElementById('sumAgTbl');
+  if(sumAgTbl){
+    // 지급 에이전시
+    sumAgTbl.innerHTML += '<tr style="background:#f5f4ef"><td colspan="5" style="font-size:11px;font-weight:500;color:#888780;text-align:left">지급 에이전시</td></tr>';
+    paidAg.forEach(d=>{
+      const retR=Math.round(d.ret/d.total*100);
+      const actR=Math.round(d.active/d.total*100);
+      const rCls=retR>=70?'bhi':retR>=40?'bmd':'blo';
+      const aCls=actR>=50?'bhi':actR>=30?'bmd':'blo';
+      sumAgTbl.innerHTML+='<tr>'+
+        '<td>'+d.ag+'</td><td>'+d.total+'개</td>'+
+        '<td><span class="badge '+rCls+'">'+retR+'%</span></td>'+
+        '<td><span class="badge '+aCls+'">'+actR+'%</span></td>'+
+        '<td style="color:#0f6e56;font-weight:500">'+fmtPost(d.postCash)+'</td>'+
+        '</tr>';
+    });
+    // 미지급 에이전시
+    sumAgTbl.innerHTML += '<tr style="background:#f5f4ef"><td colspan="5" style="font-size:11px;font-weight:500;color:#888780;text-align:left">미지급 에이전시 (조건 미충족 등)</td></tr>';
+    unpaidAg.forEach(d=>{
+      if(d.total===0){
+        sumAgTbl.innerHTML+='<tr>'+
+          '<td>'+d.ag+'</td>'+
+          '<td style="color:#b4b2a9">신청 없음</td>'+
+          '<td>-</td><td>-</td><td>-</td>'+
+          '</tr>';
+      } else {
+        const retR=Math.round(d.ret/d.total*100);
+        const actR=Math.round(d.active/d.total*100);
+        const rCls=retR>=70?'bhi':retR>=40?'bmd':'blo';
+        const aCls=actR>=50?'bhi':actR>=30?'bmd':'blo';
+        sumAgTbl.innerHTML+='<tr>'+
+          '<td>'+d.ag+'</td><td>'+d.total+'개</td>'+
+          '<td><span class="badge '+rCls+'">'+retR+'%</span></td>'+
+          '<td><span class="badge '+aCls+'">'+actR+'%</span></td>'+
+          '<td style="color:#888780">'+fmtPost(d.postCash)+'</td>'+
+          '</tr>';
+      }
+    });
+  }
+
+  // 전환율 메트릭 카드
+  const convMetricsEl = document.getElementById('convMetrics');
+  if(convMetricsEl){
+    convMetricsEl.innerHTML =
+      '<div class="metric"><p class="metric-label">지급 계정 수</p><p class="metric-value">'+convTotal+'개</p><p class="metric-sub">3월 8·4월 14·5월 19</p></div>'+
+      '<div class="metric"><p class="metric-label">유상 전환율</p><p class="metric-value">'+Math.round(convCount/convTotal*100)+'%</p><p class="metric-sub">'+convCount+'/'+convTotal+'개 유상 재집행</p></div>'+
+      '<div class="metric"><p class="metric-label">총 지급 캐시</p><p class="metric-value" style="font-size:16px">'+fmt(convReward)+'</p></div>'+
+      '<div class="metric"><p class="metric-label">이후 유상 소진</p><p class="metric-value" style="font-size:16px">'+fmt(convPostCash)+'</p><p class="metric-sub">지급 대비 '+(convPostCash/convReward).toFixed(1)+'배</p></div>';
+  }
+
+  // 지급월별 전환율 차트
+  const convMonthCanvas = document.getElementById('convMonthChart');
+  if(convMonthCanvas){
+    const months3 = ['3월','4월','5월'];
+    const mConvData = months3.map(m=>{
+      const g = paidData.filter(d=>d.pay===m);
+      return {conv:g.filter(d=>convClassify(d)===1).length, gift:g.filter(d=>convClassify(d)===2).length, none:g.filter(d=>convClassify(d)===0).length, total:g.length};
+    });
+    charts.push(new Chart(convMonthCanvas,{
+      type:'bar',
+      data:{labels:months3, datasets:[
+        {label:'유상 전환', data:mConvData.map(d=>Math.round(d.conv/d.total*100)), backgroundColor:'#3266ad', borderRadius:3},
+        {label:'무상만 소진', data:mConvData.map(d=>Math.round(d.gift/d.total*100)), backgroundColor:'#9FE1CB', borderRadius:3},
+        {label:'미소진', data:mConvData.map(d=>Math.round(d.none/d.total*100)), backgroundColor:'#e8e6df', borderRadius:3},
+      ]},
+      options:{responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.raw+'%'}}},
+        scales:{x:{stacked:true, grid:{display:false}, ticks:{color:'#888780', font:{size:11}}},
+          y:{stacked:true, max:100, ticks:{color:'#888780', callback:v=>v+'%'}, grid:{color:'rgba(0,0,0,0.05)'}}}}
+    }));
+  }
+
+  // tier별 전환율 차트
+  const convTierCanvas = document.getElementById('convTierChart');
+  if(convTierCanvas){
+    const tierConvData = ['50%','20%'].map(t=>{
+      const g = paidData.filter(d=>d.tier===t);
+      return {conv:g.filter(d=>convClassify(d)===1).length, gift:g.filter(d=>convClassify(d)===2).length, none:g.filter(d=>convClassify(d)===0).length, total:g.length};
+    });
+    charts.push(new Chart(convTierCanvas,{
+      type:'bar',
+      data:{labels:['50% 티어','20% 티어'], datasets:[
+        {label:'유상 전환', data:tierConvData.map(d=>Math.round(d.conv/d.total*100)), backgroundColor:'#3266ad', borderRadius:3},
+        {label:'무상만 소진', data:tierConvData.map(d=>Math.round(d.gift/d.total*100)), backgroundColor:'#9FE1CB', borderRadius:3},
+        {label:'미소진', data:tierConvData.map(d=>Math.round(d.none/d.total*100)), backgroundColor:'#e8e6df', borderRadius:3},
+      ]},
+      options:{responsive:true, maintainAspectRatio:false,
+        plugins:{legend:{display:false}, tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.raw+'%'}}},
+        scales:{x:{stacked:true, grid:{display:false}, ticks:{color:'#888780', font:{size:11}}},
+          y:{stacked:true, max:100, ticks:{color:'#888780', callback:v=>v+'%'}, grid:{color:'rgba(0,0,0,0.05)'}}}}
+    }));
+  }
+
+  const sumAgCanvas = document.getElementById('sumAgChart');
+  if(sumAgCanvas){
+    charts.push(new Chart(sumAgCanvas,{
+      type:'bar',
+      data:{
+        labels:paidAg.map(d=>d.ag),
+        datasets:[
+          {label:'리텐션율',data:paidAg.map(d=>Math.round(d.ret/d.total*100)),backgroundColor:'#3266ad',borderRadius:3},
+          {label:'현재 활성',data:paidAg.map(d=>Math.round(d.active/d.total*100)),backgroundColor:'#1D9E75',borderRadius:3},
+        ]
+      },
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{callbacks:{label:ctx=>ctx.dataset.label+': '+ctx.raw+'%'}}},
+        scales:{
+          x:{grid:{display:false},ticks:{color:'#888780',font:{size:10},maxRotation:40}},
+          y:{max:100,ticks:{color:'#888780',callback:v=>v+'%'},grid:{color:'rgba(0,0,0,0.05)'}}
+        }}
+    }));
+  }
+
+  // 에이전시 인사이트 카드
+  const agInsights = [
+    {col:'#1D9E75', title:'비에이티 · 플레이디 — 소규모지만 리텐션 최우수', desc:'비에이티(마켓보로·HUG)와 플레이디(브이아이피키드·롯데호텔·메디25)는 계정 수는 적지만 재집행률 100%예요. 에이전시가 광고주 캠페인을 밀착 관리할수록 리텐션이 높아지는 패턴이에요.'},
+    {col:'#D85A30', title:'세일업 — 계정 수 많지만 현재 활성이 낮아요', desc:'세일업 소속 계정들은 프로모션 기간 소진은 컸지만, 휴대폰성지 폰킹처럼 프로모션 후 바로 멈춘 케이스가 있어요. 프로모션 자체가 목적이었던 계정과 자생적으로 집행한 계정이 섞여 있어요.'},
+    {col:'#3266ad', title:'프로그레스미디어 — 가장 많은 계정, 리텐션은 중간', desc:'가장 많은 계정을 신청한 에이전시지만 리텐션율은 중간 수준이에요. 샤브20처럼 꾸준히 집행 중인 계정도 있고, 젓갈이야기처럼 조기 이탈한 소규모 계정도 있어서 편차가 커요.'},
+    {col:'#888780', title:'나스미디어 · 디엠씨미디어 · 디플랜360 — 지급 후 전원 이탈', desc:'세 에이전시 모두 지급을 받은 계정이 프로모션 이후 재집행하지 않았어요. 대형 브랜드 일회성 캠페인 성격이 강한 케이스예요.'},
+  ];
+
+  const agInsEl = document.getElementById('sumAgInsights');
+  if(agInsEl){
+    agInsEl.innerHTML = agInsights.map(ins=>
+      '<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f1efe8;">'+
+      '<div style="width:8px;height:8px;border-radius:50%;background:'+ins.col+';margin-top:4px;flex-shrink:0"></div>'+
+      '<div><p style="font-size:12px;font-weight:500;color:#1a1a18;margin:0 0 3px">'+ins.title+'</p>'+
+      '<p style="font-size:12px;color:#5f5e5a;margin:0;line-height:1.6">'+ins.desc+'</p></div>'+
+      '</div>'
+    ).join('').replace(/border-bottom[^;]+;(?=[^<]*<\/div><\/div>\s*$)/, '');
+  }
+
+  // 전환율 인사이트 카드
+  const convInsEl = document.getElementById('convInsights');
+  if(convInsEl){
+    const giftOnlyNames = ['센스맘','폰킹','더금융서비스','PLAYD_메디25','이야기모바일','기업생각','맞춤영양제 메디코치','로이파트너스'];
+    const giftOnlyCount2 = paidData.filter(d=>convClassify(d)===2).length;
+    const noneCount2 = paidData.filter(d=>convClassify(d)===0).length;
+    convInsEl.innerHTML = [
+      {col:'#3266ad',
+       title:'지급 계정 '+convTotal+'개 중 '+convCount+'개('+Math.round(convCount/convTotal*100)+'%)가 무상 캐시 수령 후에도 유상 집행을 이어갔어요',
+       desc:'단순 캐시백 수령 후 이탈이 아니라, 프로모션 이후에도 본인 예산으로 광고를 계속 집행했다는 의미예요. 유상 먼저 써야 캐시를 받는 구조에서 이후에도 유상을 이어간다는 건 플랫폼에서 실제 성과를 체감한 신호예요.'},
+      {col:'#1D9E75',
+       title:'유상 전환 계정의 이후 유상 소진이 지급 캐시 총액의 약 '+((convPostCash/convReward).toFixed(1))+'배',
+       desc:'지급한 캐시 '+fmt(convReward)+' 대비, 유상 전환 '+convCount+'개 계정의 이후 유상 소진 합계는 '+fmt(convPostCash)+'이에요. 지급 비용 대비 실질 유상 집행 유도 효과가 확인됐어요.'},
+      {col:'#D85A30',
+       title:'무상만 소진하고 이탈한 '+giftOnlyCount2+'개 계정은 일회성 캠페인 성격이 강해요',
+       desc:giftOnlyNames.join(', ')+' — 특정 기간·목적 캠페인으로 신청한 계정들이에요. 다음 프로모션에서는 장기 집행 의향이 있는 계정을 선별하는 기준이 필요해요.'},
+    ].map(ins=>
+      '<div style="display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #f1efe8">'+
+      '<div style="width:8px;height:8px;border-radius:50%;background:'+ins.col+';margin-top:4px;flex-shrink:0"></div>'+
+      '<div><p style="font-size:12px;font-weight:500;color:#1a1a18;margin:0 0 4px">'+ins.title+'</p>'+
+      '<p style="font-size:12px;color:#5f5e5a;margin:0;line-height:1.6">'+ins.desc+'</p></div>'+
+      '</div>'
+    ).join('').replace(/border-bottom[^;]+;(?=[^<]*<\/div><\/div>\s*$)/, '');
+  }
+}
+
+render('all');
+
+</script>
+<style>
+  .sum-tbl th { font-size:11px;font-weight:500;color:#888780;border-bottom:1px solid #e8e6df;padding:7px 10px;text-align:right;white-space:nowrap; }
+  .sum-tbl th:first-child { text-align:left; }
+  .sum-tbl td { padding:7px 10px;border-bottom:1px solid #f1efe8;text-align:right;font-size:12px; }
+  .sum-tbl td:first-child { text-align:left;font-weight:500; }
+  .sum-tbl tr:last-child td { border-bottom:none;font-weight:500;background:#f5f4ef; }
+  .bhi { background:#eaf3de;color:#27500a; }
+  .bmd { background:#e6f1fb;color:#0c447c; }
+  .blo { background:#fcebeb;color:#791f1f; }
+  .ins-card { background:#fff;border:1px solid #e8e6df;border-radius:12px;padding:14px 16px; }
+  .ins-lbl { font-size:11px;color:#888780;margin:0 0 5px; }
+  .ins-val { font-size:15px;font-weight:500;margin:0 0 4px; }
+  .ins-desc { font-size:12px;color:#5f5e5a;margin:0;line-height:1.6; }
+</style>
+
+</body>
+</html>
